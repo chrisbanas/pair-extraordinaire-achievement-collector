@@ -7,55 +7,46 @@ jobs:
   coauthored-prs:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      # Checkout the repository with GitHub Actions token
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Ensure Dev Branch Exists and Sync
-      run: |
-        if git ls-remote --exit-code --heads origin dev; then
-          # Branch exists on remote, fetch and check it out
-          git fetch origin dev
-          git checkout dev
-          git reset --hard origin/dev
-        else
-          # Branch does not exist, create and push it
-          git checkout -b dev
-          git push origin dev
-        fi
+      # Set up Git configuration using GitHub Actions token
+      - name: Set Up Git
+        run: |
+          git config --global user.name "chrisbanas"
+          git config --global user.email "bananas595@gmail.com"
 
-    - name: Set Up Git
-      run: |
-        git config --global user.name "chrisbanas"
-        git config --global user.email "bananas595@gmail.com"
+      # Automate Coauthored PRs
+      - name: Automate Coauthored PRs
+        env:
+          COAUTHOR_NAME: "Pair Extraordinaire Helper"
+          COAUTHOR_EMAIL: "pair-helper@badge.com"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in {1..10}
+          do
+            # Extract current count from the file
+            current_count=$(grep -oP '\d+' coauthored_merged_prs.txt || echo 0)
+            new_count=$((current_count + 1))
 
-    - name: Automate Coauthored PRs
-      env:
-        COAUTHOR_NAME: "Pair Extraordinaire Helper"
-        COAUTHOR_EMAIL: "pair-helper@badge.com"
-      run: |
-        for i in {1..10}
-        do
-          # Extract current count from the file
-          current_count=$(grep -oP '\d+' coauthored_merged_prs.txt || echo 0)
-          new_count=$((current_count + 1))
+            # Update the count in the file
+            echo "Coauthored merged pull request #: $new_count" > coauthored_merged_prs.txt
 
-          # Update the count in the file
-          echo "Coauthored merged pull request #: $new_count" > coauthored_merged_prs.txt
+            # Commit the change with the co-author
+            git add coauthored_merged_prs.txt
+            git commit -m "Update coauthored PR count to #$new_count" \
+              --author "${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>"
 
-          # Commit the change with the co-author
-          git add coauthored_merged_prs.txt
-          git commit -m "Update coauthored PR count to #$new_count" \
-            --author "${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>"
+            # Push changes to the dev branch
+            git push origin dev
 
-          # Push changes to the dev branch
-          git push origin dev
+            # Create a pull request from dev to main
+            pr_number=$(gh pr create --base main --head dev --title "PR #$new_count: Increment coauthored PR count" --body "This PR increments the coauthored PR count to $new_count." --repo ${{ github.repository }})
 
-          # Create a pull request from dev to main
-          pr_number=$(gh pr create --base main --head dev --title "PR #$new_count: Increment coauthored PR count" --body "This PR increments the coauthored PR count to $new_count.")
+            # Merge the pull request
+            gh pr merge $pr_number --merge --repo ${{ github.repository }}
 
-          # Merge the pull request
-          gh pr merge $pr_number --merge
-
-          # Optional: Sleep to avoid rate limits or conflicts
-          sleep $((RANDOM % 3 + 1))
-        done
+            # Optional: Sleep to avoid rate limits or conflicts
+            sleep $((RANDOM % 3 + 1))
+          done
