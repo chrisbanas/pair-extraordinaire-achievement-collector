@@ -11,7 +11,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Set up Git configuration using GitHub Actions token
+      # Ensure the dev branch exists
+      - name: Ensure Dev Branch Exists
+        run: |
+          if ! git show-ref --verify --quiet refs/heads/dev; then
+            git checkout -b dev
+            git push -u origin dev
+          else
+            git fetch origin dev
+            git checkout dev
+          fi
+
+      # Set up Git configuration
       - name: Set Up Git
         run: |
           git config --global user.name "chrisbanas"
