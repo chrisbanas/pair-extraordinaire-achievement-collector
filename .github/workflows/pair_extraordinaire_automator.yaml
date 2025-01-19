@@ -12,8 +12,8 @@ jobs:
 
     - name: Set Up Git
       run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "github-actions-bot@example.com"
+        git config --global user.name "chrisbanas"
+        git config --global user.email "bananas595@gmail.com"
 
     - name: Automate Coauthored PRs
       env:
