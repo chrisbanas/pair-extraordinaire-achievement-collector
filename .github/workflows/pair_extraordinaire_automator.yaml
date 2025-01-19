@@ -34,11 +34,11 @@ jobs:
       # Automate Coauthored PRs
       - name: Automate Coauthored PRs
         env:
-          COAUTHOR_NAME: "Pair Extraordinaire Helper"
-          COAUTHOR_EMAIL: "pair-helper@badge.com"
+          COAUTHOR_NAME: "cblogik"
+          COAUTHOR_EMAIL: "cbanas@logik.io"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for i in {1..10}
+          for i in {1..48}
           do
             # Extract current count from the file
             current_count=$(grep -oP '\d+' coauthored_merged_prs.txt || echo 0)
