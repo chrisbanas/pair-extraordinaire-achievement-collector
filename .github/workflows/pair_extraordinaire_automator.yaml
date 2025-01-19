@@ -11,15 +11,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Ensure the dev branch exists
-      - name: Ensure Dev Branch Exists
+      # Ensure the dev branch exists and sync with the remote
+      - name: Ensure Dev Branch Exists and Sync
         run: |
-          if ! git show-ref --verify --quiet refs/heads/dev; then
-            git checkout -b dev
-            git push -u origin dev
-          else
+          if git ls-remote --exit-code --heads origin dev; then
+            # Branch exists on remote, fetch and check it out
             git fetch origin dev
             git checkout dev
+            git reset --hard origin/dev
+          else
+            # Branch does not exist, create and push it
+            git checkout -b dev
+            git push -u origin dev
           fi
 
       # Set up Git configuration
