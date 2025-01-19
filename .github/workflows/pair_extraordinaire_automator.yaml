@@ -47,10 +47,12 @@ jobs:
             # Update the count in the file
             echo "Coauthored merged pull request #: $new_count" > coauthored_merged_prs.txt
 
-            # Commit the change with the co-author
+            # Commit the change with co-authoring
             git add coauthored_merged_prs.txt
-            git commit -m "Update coauthored PR count to #$new_count" \
-              --author "${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>"
+            git commit -m "Update coauthored PR count to #$new_count
+
+Co-authored-by: cblogik <cbanas@logik.io>" \
+              --author "chrisbanas <bananas595@gmail.com>"
 
             # Push changes to the dev branch
             git push origin dev
