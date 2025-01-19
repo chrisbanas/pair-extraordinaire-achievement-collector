@@ -33,9 +33,22 @@ jobs:
           git config --global user.name "Chris Banas"
           git config --global user.email "bananas595@gmail.com"
 
+      # Install GitHub CLI
+      - name: Install GitHub CLI
+        run: sudo apt-get install -y gh
+
+      # Authenticate with Personal Access Token
+      - name: Authenticate GitHub CLI as User
+        env:
+          GITHUB_TOKEN: ""  # Clear default token
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          echo "${{ secrets.PERSONAL_ACCESS_TOKEN }}" | gh auth login --with-token
+
       # Automate Coauthored PRs
       - name: Automate Coauthored PRs
         env:
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           COAUTHOR_NAME: "cblogik"
           COAUTHOR_EMAIL: "cbanas@logik.io"
         run: |
@@ -68,19 +81,13 @@ jobs:
             # Push the branch
             git push origin $branch_name
 
-            # Fetch and update the main branch
-            git fetch origin main
-            git checkout main
+            # Create a PR using gh CLI
+            pr_url=$(gh pr create --base main --head $branch_name \
+              --title "Automated Coauthored PR #$new_count" \
+              --body "This is an automated coauthored pull request.")
 
-            # Merge the feature branch locally
-            git merge --no-ff $branch_name -m "Merge branch '$branch_name' into main"
-
-            # Push the updated main branch
-            git push origin main
-
-            # Delete the branch locally and remotely
-            git branch -d $branch_name
-            git push origin --delete $branch_name
+            # Merge the PR using gh CLI
+            gh pr merge --squash --delete-branch --admin $pr_url
 
             # Optional: Sleep to avoid rate limits or conflicts
             sleep $((RANDOM % 3 + 1))
