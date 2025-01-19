@@ -10,6 +10,15 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
+    - name: Ensure Dev Branch Exists
+      run: |
+        if ! git rev-parse --verify dev; then
+          git checkout -b dev
+          git push origin dev
+        else
+          git checkout dev
+        fi
+
     - name: Set Up Git
       run: |
         git config --global user.name "chrisbanas"
@@ -23,7 +32,7 @@ jobs:
         for i in {1..10}
         do
           # Extract current count from the file
-          current_count=$(grep -oP '\d+' coauthored_merged_prs.txt)
+          current_count=$(grep -oP '\d+' coauthored_merged_prs.txt || echo 0)
           new_count=$((current_count + 1))
 
           # Update the count in the file
