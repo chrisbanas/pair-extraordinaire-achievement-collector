@@ -1,1 +1,48 @@
+name: Automate Pair Extraordinaire
 
+on:
+  workflow_dispatch:
+
+jobs:
+  coauthored-prs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set Up Git
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "github-actions-bot@example.com"
+
+    - name: Automate Coauthored PRs
+      env:
+        COAUTHOR_NAME: "Pair Extraordinaire Helper"
+        COAUTHOR_EMAIL: "pair-helper@badge.com"
+      run: |
+        for i in {1..10}
+        do
+          # Extract current count from the file
+          current_count=$(grep -oP '\d+' coauthored_merged_prs.txt)
+          new_count=$((current_count + 1))
+
+          # Update the count in the file
+          echo "Coauthored merged pull request #: $new_count" > coauthored_merged_prs.txt
+
+          # Commit the change with the co-author
+          git add coauthored_merged_prs.txt
+          git commit -m "Update coauthored PR count to #$new_count" \
+            --author "${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>"
+
+          # Push changes to the dev branch
+          git push origin dev
+
+          # Create a pull request from dev to main
+          pr_number=$(gh pr create --base main --head dev --title "PR #$new_count: Increment coauthored PR count" --body "This PR increments the coauthored PR count to $new_count.")
+
+          # Merge the pull request
+          gh pr merge $pr_number --merge
+
+          # Optional: Sleep to avoid rate limits or conflicts
+          sleep $((RANDOM % 3 + 1))
+        done
