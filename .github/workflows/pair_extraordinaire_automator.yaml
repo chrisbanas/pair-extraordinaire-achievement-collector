@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # for checkout & push
+  contents: write       # for pushing commits
   pull-requests: write  # for creating & merging PRs
 
 jobs:
@@ -12,13 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      # 1) Grab full history so we can work with dev & main
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      # 2) Ensure a persistent 'dev' branch exists and is synced to remote
       - name: Ensure dev branch
         run: |
           git fetch origin dev || true
@@ -26,61 +24,59 @@ jobs:
             git checkout dev
             git reset --hard origin/dev
           else
-            # Create it off main if missing
             git checkout main
             git checkout -b dev
             git push -u origin dev
           fi
 
-      # 3) Configure your committer identity
       - name: Set up Git user
         run: |
           git config --global user.name "chrisbanas"
           git config --global user.email "bananas595@gmail.com"
 
-      # 4) Install GH CLI
       - name: Install GitHub CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y gh
 
-      # 5) Authenticate GH CLI with your PAT (not GITHUB_TOKEN)
       - name: Authenticate GitHub CLI
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          # Make sure GH_TOKEN isn’t leaking in the env
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
-      # 6) Loop 48 times: bump .envexample, commit with co-authors, PR → merge
       - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # 6a) Make a trivial change
+            # 1) Make a trivial change
             echo "BADGE_RUN_$i=unlock_pair_badge" >> .envexample
             git add .envexample
 
-            # 6b) Commit with two Co-authored-by trailers
+            # 2) Commit with two Co-authored-by trailers
             git commit -m "chore: badge change #$i" \
                        -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
                        -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
 
             git push origin dev
 
-            # 6c) Create or reuse the open PR from dev→main
-            pr_number=$(gh pr list --head dev --base main --state open \
-                         --json number --jq '.[0].number // ""')
+            # 3) Find or create the PR dev→main
+            pr_number=$(gh pr list \
+                          --head dev --base main --state open \
+                          --json number --jq '.[0].number // ""')
             if [ -z "$pr_number" ]; then
               pr_number=$(gh pr create \
-                --head dev --base main \
-                --title "Automated co-authored PR #$i" \
-                --body "This PR co-authors PR #$i to unlock the Pair Extraordinaire badge.")
+                            --head dev --base main \
+                            --title "Automated co-authored PR #$i" \
+                            --body "Co-authored change #$i to unlock the Pair Extraordinaire badge.")
             fi
 
-            # 6d) Merge via a true merge commit (not squash)
-            gh pr merge "$pr_number" --merge --delete-branch false --admin
+            # 4) Merge with a real merge commit (keeps the co-authored trailers intact)
+            gh pr merge "$pr_number" --merge --admin
+
+            # small sleep to avoid any rate-limit hiccups
+            sleep $((RANDOM % 3 + 1))
           done
