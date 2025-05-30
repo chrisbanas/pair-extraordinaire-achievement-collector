@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed for checkout and push
-  pull-requests: write
+  contents: write        # for pushing commits
+  pull-requests: write   # for creating & merging PRs
 
 jobs:
   unlock-badge:
@@ -28,11 +28,12 @@ jobs:
 
       - name: Authenticate GitHub CLI
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${GH_TOKEN}" | gh auth login --with-token
+          # Pipe the token in via STDIN so GH_TOKEN isn’t set in env
+          echo "${TOKEN}" | gh auth login --with-token
 
-      - name: Create and merge 48 co-authored PRs
+      - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
@@ -50,7 +51,7 @@ jobs:
 
             pr_url=$(gh pr create \
               --title "Automated co-authored PR #$i" \
-              --body "This PR is co-authored to unlock the Pair Extraordinaire badge." \
+              --body "Unlocking Pair Extraordinaire badge co-authored PR #$i." \
               --head "$branch" \
               --base main)
 
