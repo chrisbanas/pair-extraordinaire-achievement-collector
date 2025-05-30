@@ -4,79 +4,74 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # for pushing commits
-  pull-requests: write  # for creating & merging PRs
+  contents: write       # for checkout, commits & pushes
+  pull-requests: write  # for PR creation & merges
 
 jobs:
   unlock-badge:
     runs-on: ubuntu-latest
-    steps:
 
-      - name: Checkout repository
+    steps:
+      # 1) Get full history of main
+      - name: Checkout main
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          ref: main
 
-      - name: Ensure dev branch
-        run: |
-          git fetch origin dev || true
-          if git show-ref --verify --quiet refs/remotes/origin/dev; then
-            git checkout dev
-            git reset --hard origin/dev
-          else
-            git checkout main
-            git checkout -b dev
-            git push -u origin dev
-          fi
-
+      # 2) Configure Git identity
       - name: Set up Git user
         run: |
-          git config --global user.name "chrisbanas"
-          git config --global user.email "bananas595@gmail.com"
+          git config user.name "chrisbanas"
+          git config user.email "bananas595@gmail.com"
 
-      - name: Install GitHub CLI
+      # 3) Install and authenticate GH CLI
+      - name: Install GitHub CLI & auth
         run: |
           sudo apt-get update
           sudo apt-get install -y gh
-
-      - name: Authenticate GitHub CLI
+        # PAT must be called TOKEN so GH_TOKEN isn’t auto-set
+        env:
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      - name: Login GH CLI
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
+      # 4) Loop 48 times: create ephemeral branch, commit, PR, squash-merge & delete
       - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # 1) Make a trivial change
+            BR="badge-run-$i"
+
+            # start fresh off main
+            git checkout main
+
+            # trivial bump in .envexample
             echo "BADGE_RUN_$i=unlock_pair_badge" >> .envexample
             git add .envexample
-
-            # 2) Commit with two Co-authored-by trailers
             git commit -m "chore: badge change #$i" \
                        -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
                        -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
 
-            git push origin dev
+            # push new branch
+            git push origin HEAD:"$BR"
 
-            # 3) Find or create the PR dev→main
-            pr_number=$(gh pr list \
-                          --head dev --base main --state open \
-                          --json number --jq '.[0].number // ""')
-            if [ -z "$pr_number" ]; then
-              pr_number=$(gh pr create \
-                            --head dev --base main \
-                            --title "Automated co-authored PR #$i" \
-                            --body "Co-authored change #$i to unlock the Pair Extraordinaire badge.")
-            fi
+            # open PR from $BR → main
+            PR_URL=$(gh pr create \
+                      --head "$BR" \
+                      --base main \
+                      --title "Automated co-authored PR #$i" \
+                      --body "Unlock Pair Extraordinaire badge run #$i")
 
-            # 4) Merge with a real merge commit (keeps the co-authored trailers intact)
-            gh pr merge "$pr_number" --merge --admin
+            # squash-merge & delete branch
+            gh pr merge "$PR_URL" --squash --delete-branch --admin
 
-            # small sleep to avoid any rate-limit hiccups
+            # slight jitter so GH doesn’t throttle us
             sleep $((RANDOM % 3 + 1))
           done
