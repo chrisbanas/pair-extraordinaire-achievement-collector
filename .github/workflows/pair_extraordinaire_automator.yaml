@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # for checkout, commits & pushes
-  pull-requests: write  # for creating & merging PRs
+  contents: write        # checkout, commit, push
+  pull-requests: write   # create & merge PRs
 
 jobs:
   unlock-badge:
@@ -19,26 +19,26 @@ jobs:
           fetch-depth: 0
           ref: main
 
-      # 2️⃣ Configure your Git identity
+      # 2️⃣ Configure Git identity
       - name: Set up Git user
         run: |
           git config user.name "chrisbanas"
           git config user.email "bananas595@gmail.com"
 
-      # 3️⃣ Install & authenticate GitHub CLI with your PAT
+      # 3️⃣ Install & authenticate gh CLI with your PAT
       - name: Install GitHub CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y gh
 
-      - name: Authenticate GH CLI
+      - name: Login GH CLI
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
-      # 4️⃣ Ensure .envexample exists on main
+      # 4️⃣ Ensure .envexample exists (one-time)
       - name: Ensure .envexample
         run: |
           git fetch origin main
@@ -51,41 +51,43 @@ jobs:
             git push origin main
           fi
 
-      # 5️⃣ Loop 1…48: make change, co-author commit, PR → squash-merge
+      # 5️⃣ Loop 1→48: reset main, bump file, force-push new branch, PR, squash-merge & delete
       - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # sync a clean main
+            # Reset to a clean main
             git fetch origin main
             git checkout main
             git reset --hard origin/main
 
+            # Branch name
             BR="badge-run-$i"
-            # trivial bump for change #i
+
+            # Make a trivial bump
             echo "BADGE_RUN_$i=$(date +%s)" >> .envexample
             git add .envexample
 
-            # commit with two Co-authored-by trailers
+            # Commit with co-author trailers
             git commit -m "chore: badge change #$i" \
                        -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
                        -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
 
-            # push to an ephemeral branch
-            git push origin HEAD:"$BR"
+            # Force-push to wipe any stale remote branch
+            git push --force origin HEAD:"$BR"
 
-            # open a PR from $BR → main
+            # Create the PR
             PR_URL=$(gh pr create \
                       --head "$BR" \
                       --base main \
                       --title "Automated co-authored PR #$i" \
                       --body "Unlock Pair Extraordinaire badge run #$i")
 
-            # squash-merge & delete the branch
+            # Squash-merge & delete the branch
             gh pr merge "$PR_URL" --squash --delete-branch --admin
 
-            # brief pause
+            # Brief pause (avoids any rate limiting)
             sleep 1
           done
