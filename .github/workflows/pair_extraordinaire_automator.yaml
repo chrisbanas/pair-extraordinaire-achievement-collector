@@ -4,37 +4,38 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # for checkout, commit, push
-  pull-requests: write  # for creating & merging PRs
+  contents: write       # checkout, commit, push
+  pull-requests: write  # create & merge PRs
 
 jobs:
   unlock-badge:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Fresh checkout of main
+      # 1️⃣ Checkout main with full history
       - name: Checkout main
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
 
-      # 2️⃣ Set your Git identity
+      # 2️⃣ Configure Git user
       - name: Set up Git user
         run: |
           git config user.name "chrisbanas"
           git config user.email "bananas595@gmail.com"
 
-      # 3️⃣ Install & authenticate gh CLI with your PAT
+      # 3️⃣ Install GH CLI and authenticate with your PAT
       - name: Install GitHub CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y gh
 
-      - name: Login GH CLI
+      - name: Authenticate GH CLI
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
+          # Ensure GH_TOKEN isn’t set (avoid conflicts)
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
@@ -51,44 +52,55 @@ jobs:
             git push origin main
           fi
 
-      # 5️⃣ Loop 1→48: reset, commit, PR, squash-merge & clean
+      # 5️⃣ Loop 1→48: reset, bump file, force-push branch, detect/create PR, squash-merge & delete
       - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # 🧹 Clean slate
+            # 🧹 Sync a clean main
             git fetch --prune origin
             git checkout main
             git reset --hard origin/main
 
-            # 🌿 Ephemeral branch
             BR="badge-run-$i"
-            # bump .envexample
             echo "BADGE_RUN_$i=$(date +%s)" >> .envexample
             git add .envexample
 
-            # commit with trailers
+            # Commit with co-authored trailers
             git commit -m "chore: badge change #$i" \
                        -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
                        -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
 
-            # force-push branch
+            # Force-push to wipe any stale remote branch
             git push --force origin HEAD:"$BR"
 
-            # extract full commit message (with trailers) for PR body
-            PR_BODY="$(git log -1 --pretty=%B)"
+            # Grab the full commit message (with trailers) as PR body
+            PR_BODY=$(git log -1 --pretty=%B)
+            PR_TITLE=$(echo "$PR_BODY" | head -n1)
 
-            # open the PR
-            PR_URL=$(gh pr create \
-                      --head "$BR" \
-                      --base main \
-                      --title "chore: badge change #$i" \
-                      --body "$PR_BODY")
+            # Detect an existing open PR for this branch
+            OPEN_PR=$(gh pr list \
+                        --state open \
+                        --head "$BR" \
+                        --base main \
+                        --json url \
+                        --jq '.[0].url // ""')
 
-            # squash-merge & delete the branch
+            if [ -n "$OPEN_PR" ]; then
+              PR_URL="$OPEN_PR"
+            else
+              PR_URL=$(gh pr create \
+                        --head "$BR" \
+                        --base main \
+                        --title "$PR_TITLE" \
+                        --body "$PR_BODY")
+            fi
+
+            # Squash-merge & delete the branch
             gh pr merge "$PR_URL" --squash --delete-branch --admin
 
+            # brief pause to avoid rate limits
             sleep 1
           done
