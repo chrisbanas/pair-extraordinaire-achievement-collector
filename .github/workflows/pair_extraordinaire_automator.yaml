@@ -5,73 +5,87 @@ on:
 
 permissions:
   contents: write       # for checkout, commits & pushes
-  pull-requests: write  # for PR creation & merges
+  pull-requests: write  # for creating & merging PRs
 
 jobs:
   unlock-badge:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Get full history of main
+      # 1️⃣ Checkout main with full history
       - name: Checkout main
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
 
-      # 2) Configure Git identity
+      # 2️⃣ Configure your Git identity
       - name: Set up Git user
         run: |
           git config user.name "chrisbanas"
           git config user.email "bananas595@gmail.com"
 
-      # 3) Install and authenticate GH CLI
-      - name: Install GitHub CLI & auth
+      # 3️⃣ Install & authenticate GitHub CLI with your PAT
+      - name: Install GitHub CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y gh
-        # PAT must be called TOKEN so GH_TOKEN isn’t auto-set
-        env:
-          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-      - name: Login GH CLI
+
+      - name: Authenticate GH CLI
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
-      # 4) Loop 48 times: create ephemeral branch, commit, PR, squash-merge & delete
+      # 4️⃣ Ensure .envexample exists on main
+      - name: Ensure .envexample
+        run: |
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          if [ ! -f .envexample ]; then
+            touch .envexample
+            git add .envexample
+            git commit -m "chore: add .envexample placeholder"
+            git push origin main
+          fi
+
+      # 5️⃣ Loop 1…48: make change, co-author commit, PR → squash-merge
       - name: Create & merge 48 co-authored PRs
         env:
           COAUTHOR_NAME: "DongwanSummerXu"
           COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            BR="badge-run-$i"
-
-            # start fresh off main
+            # sync a clean main
+            git fetch origin main
             git checkout main
+            git reset --hard origin/main
 
-            # trivial bump in .envexample
-            echo "BADGE_RUN_$i=unlock_pair_badge" >> .envexample
+            BR="badge-run-$i"
+            # trivial bump for change #i
+            echo "BADGE_RUN_$i=$(date +%s)" >> .envexample
             git add .envexample
+
+            # commit with two Co-authored-by trailers
             git commit -m "chore: badge change #$i" \
                        -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
                        -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
 
-            # push new branch
+            # push to an ephemeral branch
             git push origin HEAD:"$BR"
 
-            # open PR from $BR → main
+            # open a PR from $BR → main
             PR_URL=$(gh pr create \
                       --head "$BR" \
                       --base main \
                       --title "Automated co-authored PR #$i" \
                       --body "Unlock Pair Extraordinaire badge run #$i")
 
-            # squash-merge & delete branch
+            # squash-merge & delete the branch
             gh pr merge "$PR_URL" --squash --delete-branch --admin
 
-            # slight jitter so GH doesn’t throttle us
-            sleep $((RANDOM % 3 + 1))
+            # brief pause
+            sleep 1
           done
