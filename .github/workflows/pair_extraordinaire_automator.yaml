@@ -4,28 +4,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # checkout, commit, push
-  pull-requests: write  # create & merge PRs
+  contents: write      # for checkout, committing, and pushing
+  pull-requests: write # for creating & merging PRs
 
 jobs:
   unlock-badge:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout a bare copy of main (no local commits ever land here)
-      - name: Checkout repository
+      # 1️⃣ Checkout the main branch with full history
+      - name: Checkout main
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
 
-      # 2️⃣ Configure your Git identity (for all ephemeral commits)
-      - name: Set up Git user
-        run: |
-          git config user.name "chrisbanas"
-          git config user.email "bananas595@gmail.com"
-
-      # 3️⃣ Install GH CLI and authenticate via PAT
+      # 2️⃣ Install and authenticate GitHub CLI with your PAT
       - name: Install GitHub CLI
         run: |
           sudo apt-get update
@@ -38,14 +32,11 @@ jobs:
           unset GH_TOKEN
           echo "$TOKEN" | gh auth login --with-token
 
-      # 4️⃣ Ensure .envexample exists on remote main (create once if needed)
-      - name: Ensure .envexample on main
+      # 3️⃣ Ensure .envexample exists on main (create it if missing)
+      - name: Ensure .envexample
         run: |
-          # Fetch the very latest remote main
           git fetch --prune origin main
-          # Check out a fresh copy of origin/main into local directory
           git checkout --force origin/main
-          # If the file is missing, add it and push straight to main
           if [ ! -f .envexample ]; then
             touch .envexample
             git add .envexample
@@ -53,39 +44,42 @@ jobs:
             git push origin HEAD:main
           fi
 
-      # 5️⃣ Loop 1→48: each iteration creates a new branch off origin/main, commits, PR & squash-merge
+      # 4️⃣ Loop 1→48: create an ephemeral branch off origin/main, commit as DongwanXu, co-author by chrisbanas, PR → squash-merge → delete
       - name: Create & merge 48 co-authored PRs
         env:
-          COAUTHOR_NAME: "DongwanXu"                          # Second account’s exact GitHub username
-          COAUTHOR_EMAIL: "dongwanxu23@gmail.com"             # Must be a verified email on that GitHub account
+          COAUTHOR_NAME: "DongwanXu"
+          COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
+          PRIMARY_NAME: "chrisbanas"
+          PRIMARY_EMAIL: "bananas595@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # 5a) Grab a fresh, detached copy of origin/main
+            # 4a) Get a pristine copy of origin/main
             git fetch --prune origin main
             git checkout --detach origin/main
 
-            # 5b) Create an ephemeral local branch off that commit
+            # 4b) Create an ephemeral local branch
             EPHEMERAL="ephemeral-badge-$i"
             git checkout -b "$EPHEMERAL"
 
-            # 5c) Bump the file
+            # 4c) Bump .envexample
             echo "BADGE_RUN_$i=$(date +%s)" >> .envexample
             git add .envexample
 
-            # 5d) Commit with both co-author trailers
-            git commit -m "chore: badge change #$i" \
-                       -m "Co-authored-by: ${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
-                       -m "Co-authored-by: chrisbanas <bananas595@gmail.com>"
+            # 4d) Commit, setting the author to the SECONDARY account, and adding a Co-authored-by trailer for the primary account
+            git commit \
+              --author="${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
+              -m "chore: badge change #$i" \
+              -m "Co-authored-by: ${PRIMARY_NAME} <${PRIMARY_EMAIL}>"
 
-            # 5e) Force-push that ephemeral branch as badge-run-$i
+            # 4e) Force-push to badge-run-$i (wiping out any older remote branch)
             REMOTE_BRANCH="badge-run-$i"
             git push --force origin HEAD:"$REMOTE_BRANCH"
 
-            # 5f) Build the PR body from the commit message
+            # 4f) Grab the full commit message (author + trailer)
             PR_BODY=$(git log -1 --pretty=%B)
             PR_TITLE=$(echo "$PR_BODY" | head -n1)
 
-            # 5g) Check if a PR is already open from badge-run-$i → main
+            # 4g) Detect if a PR is already open from badge-run-$i → main
             EXISTING_PR=$(gh pr list \
                              --state open \
                              --head "$REMOTE_BRANCH" \
@@ -103,9 +97,9 @@ jobs:
                          --body "$PR_BODY")
             fi
 
-            # 5h) Squash-merge that PR (co-author trailers remain in the final commit)
+            # 4h) Squash-merge & delete the branch
             gh pr merge "$PR_URL" --squash --delete-branch --admin
 
-            # 5i) Brief pause to avoid rate-limits
+            # 4i) Short sleep to avoid rate limiting
             sleep 1
           done
