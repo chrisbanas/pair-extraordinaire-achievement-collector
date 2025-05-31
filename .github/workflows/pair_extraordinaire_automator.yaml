@@ -55,8 +55,8 @@ jobs:
       # 5️⃣ Loop 1→48: reset, bump file, force-push branch, detect/create PR, squash-merge & delete
       - name: Create & merge 48 co-authored PRs
         env:
-          COAUTHOR_NAME: "asrigopal-logik"
-          COAUTHOR_EMAIL: "asrigopal@logik.io"
+          COAUTHOR_NAME: "DongwanXu"
+          COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
         run: |
           for i in $(seq 1 48); do
             # 🧹 Sync a clean main
