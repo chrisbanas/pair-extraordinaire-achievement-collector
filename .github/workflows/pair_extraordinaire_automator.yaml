@@ -52,7 +52,7 @@ jobs:
           PRIMARY_NAME: "chrisbanas"
           PRIMARY_EMAIL: "bananas595@gmail.com"
         run: |
-          for i in $(seq 1 48); do
+          for i in $(seq 1 49); do
             # 4a) Fetch the very latest origin/main
             git fetch --prune origin main
             # Detach to exactly origin/main
