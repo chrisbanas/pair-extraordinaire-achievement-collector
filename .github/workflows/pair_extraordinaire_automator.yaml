@@ -4,22 +4,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write      # for checkout, committing, and pushing
-  pull-requests: write # for creating & merging PRs
+  contents: write       # for checkout, commit, and push
+  pull-requests: write  # for creating and merging PRs
 
 jobs:
   unlock-badge:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout the main branch with full history
+      # 1️⃣ Checkout the main branch (full history so we can reset to origin/main)
       - name: Checkout main
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: main
 
-      # 2️⃣ Install and authenticate GitHub CLI with your PAT
+      # 2️⃣ Install GitHub CLI and authenticate via your PAT
       - name: Install GitHub CLI
         run: |
           sudo apt-get update
@@ -33,7 +33,7 @@ jobs:
           echo "$TOKEN" | gh auth login --with-token
 
       # 3️⃣ Ensure .envexample exists on main (create it if missing)
-      - name: Ensure .envexample
+      - name: Ensure .envexample on main
         run: |
           git fetch --prune origin main
           git checkout --force origin/main
@@ -44,42 +44,47 @@ jobs:
             git push origin HEAD:main
           fi
 
-      # 4️⃣ Loop 1→48: create an ephemeral branch off origin/main, commit as DongwanXu, co-author by chrisbanas, PR → squash-merge → delete
+      # 4️⃣ Loop 1→48: create a fresh commit authored by DongwanXu, co-authored by chrisbanas, PR → squash-merge → delete
       - name: Create & merge 48 co-authored PRs
         env:
-          COAUTHOR_NAME: "DongwanXu"
-          COAUTHOR_EMAIL: "dongwanxu23@gmail.com"
+          COAUTHOR_NAME: "DongwanXu"                          # Secondary account’s GitHub username
+          COAUTHOR_EMAIL: "dongwanxu23@gmail.com"             # Must be a verified email on that account
           PRIMARY_NAME: "chrisbanas"
           PRIMARY_EMAIL: "bananas595@gmail.com"
         run: |
           for i in $(seq 1 48); do
-            # 4a) Get a pristine copy of origin/main
+            # 4a) Fetch the very latest origin/main
             git fetch --prune origin main
+            # Detach to exactly origin/main
             git checkout --detach origin/main
 
             # 4b) Create an ephemeral local branch
             EPHEMERAL="ephemeral-badge-$i"
             git checkout -b "$EPHEMERAL"
 
-            # 4c) Bump .envexample
+            # 4c) Update .envexample
             echo "BADGE_RUN_$i=$(date +%s)" >> .envexample
             git add .envexample
 
-            # 4d) Commit, setting the author to the SECONDARY account, and adding a Co-authored-by trailer for the primary account
+            # 4d) Set committer identity to the secondary user (DongwanXu)
+            git config user.name "$COAUTHOR_NAME"
+            git config user.email "$COAUTHOR_EMAIL"
+
+            # 4e) Commit as DongwanXu (author) + Co-authored-by trailer for chrisbanas
             git commit \
               --author="${COAUTHOR_NAME} <${COAUTHOR_EMAIL}>" \
               -m "chore: badge change #$i" \
               -m "Co-authored-by: ${PRIMARY_NAME} <${PRIMARY_EMAIL}>"
 
-            # 4e) Force-push to badge-run-$i (wiping out any older remote branch)
+            # 4f) Force-push this ephemeral branch as badge-run-i
             REMOTE_BRANCH="badge-run-$i"
             git push --force origin HEAD:"$REMOTE_BRANCH"
 
-            # 4f) Grab the full commit message (author + trailer)
+            # 4g) Grab commit message (with trailers) for PR body
             PR_BODY=$(git log -1 --pretty=%B)
             PR_TITLE=$(echo "$PR_BODY" | head -n1)
 
-            # 4g) Detect if a PR is already open from badge-run-$i → main
+            # 4h) If a PR already exists for badge-run-i → main, reuse it; otherwise, create it
             EXISTING_PR=$(gh pr list \
                              --state open \
                              --head "$REMOTE_BRANCH" \
@@ -97,9 +102,9 @@ jobs:
                          --body "$PR_BODY")
             fi
 
-            # 4h) Squash-merge & delete the branch
+            # 4i) Squash-merge & delete the branch
             gh pr merge "$PR_URL" --squash --delete-branch --admin
 
-            # 4i) Short sleep to avoid rate limiting
+            # 4j) Short pause to avoid rate limits
             sleep 1
           done
